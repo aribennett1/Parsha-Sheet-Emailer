@@ -1,36 +1,32 @@
-function main() {
+function main() {  
   var d = new Date();
-  // PropertiesService.getScriptProperties().deleteAllProperties();
-  var year = d.getFullYear();
-  var hebcal = getHebcal(d);
+  if (d.getFullYear() != PropertiesService.getScriptProperties().getProperty("thisYear")) {
+  PropertiesService.getScriptProperties().deleteAllProperties();
+  PropertiesService.getScriptProperties().setProperty("thisYear", d.getFullYear());
+  }
+  var year = d.getFullYear();  
   var parsha = [];
   var holiday = "";
-  // console.log(hebcal);
-  if (hebcal.includes("Parshas ")) {
-    var thisWeeksParsha = getParsha(hebcal);
+  var hebcal = getHebcal(d);
+  var thisWeeksParsha = hebcal.items.find(item => item.title.includes("Parshas "));
+  if (thisWeeksParsha) {
+    var thisWeeksParsha = thisWeeksParsha.title.replaceAll("Parshas ", "").replaceAll("Sazria","Tazria")
     if (thisWeeksParsha.includes("-") && thisWeeksParsha != "Lech-Lecha") {
-      thisWeeksParsha = thisWeeksParsha.split("-");
-      parsha.push(thisWeeksParsha[0]);
-      parsha.push(thisWeeksParsha[1]);
+      parsha = thisWeeksParsha.split("-");
     }
     else {
       parsha.push(thisWeeksParsha);
     }
   }
-  if (hebcal.includes("Simchas Torah")) {
-    if (PropertiesService.getScriptProperties().getProperty("V'Zos Habracha"+year) != "sent") {
-      PropertiesService.getScriptProperties().setProperty("V'Zos Habracha"+year, "sent");
+  if (hebcal.items.find(item => item.title.includes("Simchas Torah"))) {
+    if (PropertiesService.getScriptProperties().getProperty(`V'Zos Habracha${year}`) != "sent") {
+      PropertiesService.getScriptProperties().setProperty(`V'Zos Habracha${year}`, "sent");
       parsha.push("V'Zos Habracha");
     }
   }  
-  for (var par in parsha) {
-    console.log(`parsha: ${parsha[par]}`);
-  } 
-  if (hebcal.includes("\"category\":\"holiday")) {    
-    holiday = getHoliday(hebcal, year);
-  }
-  if (holiday != "") {
-    console.log(`holiday: ${holiday}`);
+  var holiday = hebcal.items.find(item => item.category.includes("holiday"));
+  if (holiday) {    
+    holiday = getHoliday(holiday.title, year);
   }
   if (parsha.length != 0 || holiday != "") {
     emailSheet(parsha, holiday);
@@ -40,71 +36,26 @@ function main() {
   }
 }
 
-function getParsha(hebcal) {
-hebcal = hebcal.substring(hebcal.indexOf("Parshas ") + 8);
-hebcal = hebcal.substring(0, hebcal.indexOf("\",\"date\""));
-return hebcal.replaceAll("Sazria","Tazria");
-}
-
-function getHoliday(hebcal, year) {
-  var index = hebcal.indexOf("\"category\":\"holiday");
-  for (var i = index; i > 0; i--) {
-    if (hebcal.charAt(i) == "{") {
-      index = i;
-      break;
-    }
-  }
-  hebcal = hebcal.substring(index);
-  hebcal = hebcal.substring(hebcal.indexOf("title\":\"") + 8);
-  hebcal = hebcal.substring(0, hebcal.indexOf("\",\"date\""));
-  hebcal = hebcal.replaceAll("Erev ", "");
-  if (hebcal === "Shavuos" || hebcal === "Pesach" || hebcal === "Purim") {
-    var property = hebcal+year;
-    // console.log(`property: ${property}`);
-    if (PropertiesService.getScriptProperties().getProperty(property) != "sent") {
-      PropertiesService.getScriptProperties().setProperty(property, "sent");
-    }
-    else {
-    hebcal = "";
-    }
+function getHoliday(title, year) {  
+  title = title.replaceAll("Erev ", "");
+  if (title === "Shavuos" || title === "Pesach" || title === "Purim") {
+    var property = title+year;
+    PropertiesService.getScriptProperties().getProperty(property) != "sent" ?
+      PropertiesService.getScriptProperties().setProperty(property, "sent") : title = "";   
   }
   else {
-    hebcal = "";
+    title = "";
   }
-  return hebcal;
+  return title;
 }
 
 function getHebcal(todaysDate) {
-  var today = getDate(todaysDate);
-  var nextWeekDate = addDays(todaysDate, 10);
-  var nextWeek = getDate(nextWeekDate);
-  var hebcal = UrlFetchApp.fetch(`https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=off&nx=off&start=${today}&end=${nextWeek}&ss=off&lg=a&mf=off&c=off&M=off&s=on`);
-  return hebcal.getContentText();
+  return JSON.parse(UrlFetchApp.fetch(`https://www.hebcal.com/hebcal?v=1&cfg=json&maj=on&min=on&mod=off&nx=off&start=${getDate(todaysDate)}&end=${getDate(addDays(todaysDate, 10))}&ss=off&lg=a&mf=off&c=off&M=off&s=on`).getContentText());
 }
 
-function getDate(d) {
-  var day = d.getDate();
-  day = addLeadingZeroIfLenIsOne(day);
-  let month = d.getMonth() + 1;
-  month = addLeadingZeroIfLenIsOne(month);
-  let year = d.getFullYear();
-  var date = `${year}-${month}-${day}`;
-  // console.log(`date: ${date}`);
-  return date;
-}
+const getDate = d => `${d.getFullYear()}-${(d.getMonth() + 1).toString().padStart(2, '0')}-${d.getDate().toString().padStart(2, '0')}`;
 
-function addLeadingZeroIfLenIsOne(num) {
-if (num.toString().length == 1) {
-    num = "0" + num;
-  }
-  return num;
-}
-
-function addDays(date, days) {
-  var result = new Date(date);
-  result.setDate(result.getDate() + days);
-  return result;
-}
+const addDays = (date, days) => new Date(date.getTime() + days * 24 * 60 * 60 * 1000);
 
 function emailSheet(parsha, holiday) {
   var attachments = [];
@@ -137,13 +88,13 @@ if (holiday != "") {
     subject = `${holiday} Questions`;
   }
 }
-  var folders = DriveApp.getFoldersByName(""); //enter the name of Google Drive folder
-  var files = folders.next().getFiles();
+  var folders = DriveApp.getFolderById("1ihDno5us7sLY6NH5fmqORPuplD8Uz_66");
+  var files = folders.getFiles();
+  var file;
   while (files.hasNext()) {
-    var file = files.next();
+    file = files.next();
     for (var name in parsha) {
-      if (file.getName().includes(parsha[name])) {
-        // console.log("Pushing file: " + (file.getName()));
+        if (file.getName().includes(parsha[name])) {
         attachments.push(file);
       }
     }
@@ -154,7 +105,9 @@ if (holiday != "") {
   for (var file in attachments) {
     console.log(attachments[file].getName());
   }
-  GmailApp.sendEmail(Session.getActiveUser().getEmail(), subject, "",{
-        attachments: attachments
+  GmailApp.sendEmail("[EMAIL REMOVED]", subject, "",{
+        from: "aribennett1@gmail.com",
+        attachments: attachments,
+        name: "Ari Bennett"
       });
 }
