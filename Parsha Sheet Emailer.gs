@@ -20,7 +20,7 @@ function main() {
       parsha.push(thisWeeksParsha);
     }
   }
-  if (hebcal.items.find(item => item.title.includes("Simchas Torah"))) {
+  if (hebrewMonth == "Tishrei" && hebrewDay >= 13) {
     if (PropertiesService.getScriptProperties().getProperty(`V'Zos Habracha${hebrewYear}`) != "sent") {
       PropertiesService.getScriptProperties().setProperty(`V'Zos Habracha${hebrewYear}`, "sent");
       parsha.push("V'Zos Habracha");
@@ -116,6 +116,7 @@ function emailSheet(parsha, holiday) {
     for (var name in parsha) {
       if (file.getName().includes(parsha[name])) {
         attachments.push(file);
+        continue;
       }
     }
     if (attachments.length == parsha.length) {
